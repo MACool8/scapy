@@ -3,8 +3,9 @@
 # Copyright (C) Martin Albert <macool8@t-online.de>
 # This program is published under a GPLv2 license
 
-# This is an implementation for Scapy to communicate with devices which have SecOc implemented
-# SecOc is an AUTOSAR module described in the AUTOSAR document
+# This is an implementation for Scapy to communicate with devices which have
+# Secure Onboard Communication (SecOC) implemented.
+# SecOC is an AUTOSAR module described in the AUTOSAR document
 # "Specification of Secure Onboard Communication" (Doc. Id: 654)
 
 # scapy.contrib.description = Secure Onboard Communication (SecOc)
@@ -38,14 +39,81 @@ class FreshnessValueManager():
         return self.value
 
     def FM_VerifyFreshness(self):
+        return None
 
 
-class Ciphers(Enum):
-    AES256 = 1
-    AES128 = 2
-    RSA = 3
+# Enumerated by SWS_Csm_01047
+class Crypto_Algo(Enum):
+    NOT_SET                 = 0x00  # Algorithm family is not set
+    SHA1                    = 0x01  # SHA1 hash
+    SHA2_224                = 0x02  # SHA2-224 hash
+    SHA2_256                = 0x03  # SHA2-256 hash
+    SHA2_384                = 0x04  # SHA2-384 hash
+    SHA2_512                = 0x05  # SHA2-512 hash
+    SHA2_512_224            = 0x06  # SHA2-512/224 hash
+    SHA2_512_256            = 0x07  # SHA2-512/256 hash
+    SHA3_224                = 0x08  # SHA3-224 hash
+    SHA3_256                = 0x09  # SHA3-256 hash
+    SHA3_384                = 0x0a  # SHA3-384 hash
+    SHA3_512                = 0x0b  # SHA3-512 hash
+    SHAKE128                = 0x0c  # SHAKE128 hash
+    SHAKE256                = 0x0d  # SHAKE256 hash
+    RIPEMD160               = 0x0e  # RIPEMD hash
+    BLAKE_1_256             = 0x0f  # BLAKE-1-256 hash
+    BLAKE_1_512             = 0x10  # BLAKE-1-512 hash
+    BLAKE_2s_256            = 0x11  # BLAKE-2s-256 hash
+    BLAKE_2s_512            = 0x12  # BLAKE-2s-512 hash
+    _3DES                   = 0x13  # 3DES cipher
+    AES                     = 0x14  # AES cipher
+    CHACHA                  = 0x15  # ChaCha cipher
+    RSA                     = 0x16  # RSA cipher
+    ED25519                 = 0x17  # ED22518 elliptic curve
+    BRAINPOOL               = 0x18  # Brainpool elliptic curve
+    ECCNIST                 = 0x19  # NIST ECC elliptic curves
+    RNG                     = 0x1b  # Random Number Generator
+    SIPHASH                 = 0x1c  # SipHash
+    ECCANSI                 = 0x1e  # Elliptic curve according to ANSI X9.62
+    ECCSEC                  = 0x1f  # Elliptic curve according to SECG
+    DRBG                    = 0x20  # Random number generator according to NIST
+    FIPS186                 = 0x21  # Random number generator according to FIPS 186.
+    PADDING_PKCS7           = 0x22  # Cipher padding according to PKCS.7
+    PADDING_ONEWITHZEROS    = 0x23  # Cipher padding mode. Fill/ but first bit after the data is 1. Eg. "DATA" &
+    PBKDF2                  = 0x24  # Password-Based Key Derivation Function 2
+    KDFX963                 = 0x25  # ANSI X9.63 Public Key Cryptography
+    DH                      = 0x26  # Diffie-Hellman
+    CUSTOM                  = 0xff  # Custom algorithm family
+
+# Enumerated by SWS_Csm_01048
+class Crypto_Mode(Enum):
+    NOT_SET             = 0x00  # Algorithm key is not set
+    ECB                 = 0x01  # Blockmode: Electronic Code Book
+    CBC                 = 0x02  # Blockmode: Cipher Block Chaining
+    CFB                 = 0x03  # Blockmode: Cipher Feedback Mode
+    OFB                 = 0x04  # Blockmode: Output Feedback Mode
+    CTR                 = 0x05  # Blockmode: Counter Modex
+    GCM                 = 0x06  # Blockmode: Galois/Counter Mode
+    XTS                 = 0x07  # XOR-encryption-based tweakedcodebook mode with ciphertext stealing
+    RSAES_OAEP          = 0x08  # RSA Optimal Asymmetric Encryption Padding
+    RSAES_PKCS1_v1_5    = 0x09  # RSA encryption/ PKCS#1 v1.5 padding decryption with
+    RSASSA_PSS          = 0x0a  # RSA Probabilistic Signature Scheme
+    RSASSA_PKCS1_v1_5   = 0x0b  # RSA signature with PKCS#1 v1.5
+    _8ROUNDS            = 0x0c  # 8 rounds (e.g. ChaCha8)
+    _12ROUNDS           = 0x0d  # 12 rounds (e.g. ChaCha12)
+    _20ROUNDS           = 0x0e  # 20 rounds (e.g. ChaCha20)
+    HMAC                = 0x0f  # Hashed-based MAC
+    CMAC                = 0x10  # Cipher-based MAC
+    GMAC                = 0x11  # Galois MAC
+    CTRDRBG             = 0x12  # Counter-based Deterministic Random
+    SIPHASH_2_4         = 0x13  # Siphash-2-4
+    SIPHASH_4_8         = 0x14  # Siphash-4-8
+    PXXXR1              = 0x15  # ANSI R1 Curve
+    CUSTOM              = 0xff  # Custom algorithm mode
+
 
 class CryptoServiceManager():
+    CsmMacGenerateAlgorithmKeyLength: int = 0 # Size of the MAC key in bytes
+    CsmMacGenerateResultLength: int = 0 # Size of the output MAC length in bytes
+
     def Csm_MacGenerate(self):
         Exception("Not Implemented yet")
 
@@ -64,14 +132,22 @@ class CryptoServiceManager():
     def Csm_KeySetVelid(self):
         Exception("Not Implemented yet")
 
-
+# Represents a Secured I-PDU
 class SecOC(Packet):
-    payload: bytes
+    header: bytes                   # Secured I-PDU Header (optional)
+    payload: bytes                  # Authentic I-PDU
+    freshness: bytes                # Freshness Value (optional)
+    authenticator: bytes            # Authenticator
+    freshness_length: int = 0       # Length of Freshness represented in the Packet (bits)
+    authenticator_length: int = 0   # Length of authenticator represented in the Packet (bits)
+    freshness_size: int = 0         # actual internal length used for the freshness value
+
+
     symmetric_key: bytes
     asymmetric_encrypt_key: bytes
     asymmetric_decrypt_key: bytes
-    cipher: Ciphers = Ciphers.AES256
-    freshness_length: int = 0
+    cipher: Crypto_Algo = Crypto_Algo.AES
+    freshness_length: int = 0 # In bits
     truncate_freshness_length: int = 0
     truncate_authenticator_length: int = 0
 
@@ -80,3 +156,10 @@ class SecOC(Packet):
 # Freshness Value is still naive: Should be like on page 138 of AUTOSAR_SWS_SecureOnboardCommunication Specification
 # Ciphers Enum should include a lot more ciphers as described in AUTOSAR_SWS_CryptoServiceManager
 # Keys in SecOC Packet should be stored inside Crypto Service Manager
+
+# All SecOC information are big-endian [PRS_SecOC_00101]
+# The Secured I-PDU Header is the length of the Authentic I-PDU and itself can vary in length
+# Freshness Values can also be already inside of payloads/Authentic I-PDUs
+# Authenticator_raw = Data ID (16 bit, big endian) + Auth. I-PDU + Full Freshness Value (big endian)  (+ = concatinated)
+# Authenticator = Authenticator_raw encrypted with the right cryptosystem to create a MAC/signature and than truncated to the required size
+# [PRS_SecOc_00206] describes how to handle errors in the process of creating an authenticator. I don't think i should implement this.
