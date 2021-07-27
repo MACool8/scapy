@@ -10,11 +10,14 @@
 
 # scapy.contrib.description = Secure Onboard Communication (SecOc)
 # scapy.contrib.status = loads
+import time
 
 from scapy.packet import Packet
 from scapy.config import conf
 from scapy.error import log_loading
 from enum import Enum
+from Crypto.Cipher import AES
+from Crypto.Hash import CMAC
 
 
 class FreshnessModes(Enum):
@@ -22,23 +25,40 @@ class FreshnessModes(Enum):
     Timestamp = 2
 
 class FreshnessValueManager():
-    def counter_increment(self):
+    def _counter_increment(self):
         self.value += 1
 
     value: int = 0
-    increment_function = counter_increment
-    length: int = 0
-    mode: FreshnessModes = FreshnessModes.Counter
+    FM_Length: int = 0 # actual internal length used for the freshness value
+    FM_TruncatedLength: int = 0 # Length of Freshness represented in the Packet (bits)
+    increment_function = _counter_increment
+    FM_Mode: FreshnessModes = FreshnessModes.Counter
+    timestampoffset: int = 0
+
+    def __int__(self, Mode: FreshnessModes = FreshnessModes.Counter, InitialValua: int = None, TimeStampOffset: int = None):
+        if InitialValua != None and type(InitialValua) == int:
+            self.value = InitialValua
+
+        if TimeStampOffset != None and type(TimeStampOffset) == int:
+            self.timestampoffset = InitialValua
+
+        self.FM_Mode = Mode
 
     def FM_GetValueAndIncrease(self):
-        return_value = self.value
-        self.increment_function()
-        return return_value
+        if self.mode == FreshnessModes.Counter:
+            return_value = self.value
+            self.increment_function()
+            return return_value
+        else:
+            return int(time.time()) + self.timestampoffset
 
     def FM_GetValue(self):
-        return self.value
+        if self.mode == FreshnessModes.Counter:
+            return self.value
+        else:
+            return int(time.time()) + self.timestampoffset
 
-    def FM_VerifyFreshness(self):
+    def FM_VerifyFreshness(self, packet):
         return None
 
 
@@ -109,12 +129,31 @@ class Crypto_Mode(Enum):
     PXXXR1              = 0x15  # ANSI R1 Curve
     CUSTOM              = 0xff  # Custom algorithm mode
 
+class VerificationResultType(Enum):
+    SECOC_VERIFICATIONSUCCESS   = 0x00
+    SECOC_VERIFICATIONFAILURE   = 0x01
+    SECOC_FRESHNESSFAILURE      = 0x02
+    SECOCE_RE_FRESHNESS_FAILURE = 0x03
 
 class CryptoServiceManager():
     CsmMacGenerateAlgorithmKeyLength: int = 0 # Size of the MAC key in bytes
     CsmMacGenerateResultLength: int = 0 # Size of the output MAC length in bytes
+    CsmAlgo: Crypto_Algo = Crypto_Algo.AES
+    CsmAlgoMode: Crypto_Mode = Crypto_Mode.CMAC
+    CsmSecondaryAlgo: Crypto_Algo = Crypto_Algo.NOT_SET
 
-    def Csm_MacGenerate(self):
+    _symmetric_key: bytes = None
+    _asymmetric_encrypt_key: bytes = None
+    _asymmetric_decrypt_key: bytes = None
+
+    def Csm_MacGenerate(self, Data_ID: bytes, I_PDU:bytes, FreshnessValue: bytes):
+        Cipher = None
+        Authenticator_Raw = b"".join([Data_ID, I_PDU, FreshnessValue])
+        if self.CsmAlgo ==  Crypto_Algo.AES:
+            Cipher = AES
+
+        if
+
         Exception("Not Implemented yet")
 
     def Csm_MacVerify(self):
@@ -126,7 +165,7 @@ class CryptoServiceManager():
     def Csm_SignatureVerify(self):
         Exception("Not Implemented yet")
 
-    def Csm_KeyElementSet(self):
+    def Csm_KeyElementSet(self, symmetric_key: bytes, ):
         Exception("Not Implemented yet")
 
     def Csm_KeySetVelid(self):
@@ -138,18 +177,62 @@ class SecOC(Packet):
     payload: bytes                  # Authentic I-PDU
     freshness: bytes                # Freshness Value (optional)
     authenticator: bytes            # Authenticator
-    freshness_length: int = 0       # Length of Freshness represented in the Packet (bits)
-    authenticator_length: int = 0   # Length of authenticator represented in the Packet (bits)
-    freshness_size: int = 0         # actual internal length used for the freshness value
+
+class SecOC_Profile(Enum):
+    Profile1 = 0x01 # 24Bit_CMAC_8Bit_FV
+    Profile2 = 0x02 # 24Bit_CMAC_No_FV
+    Profile3 = 0x03 # JASPAR, Recommended for CAN-bus use
+
+class SecOCSocket(StreamSocket):
+    authenticator_length: int = 0  # Length of authenticator represented in the Packet (bits)
+    freshness_override_state: bool = false  # Should the freshness value be sent/received without checking
+    FM: FreshnessValueManager = FreshnessValueManager()
+    CSM: CryptoServiceManager = CryptoServiceManager()
+
+    def __init__(self,
+                 Symmetric_Key: bytes = None,
+                 Asymmetric_Encryption_Key: bytes = None,
+                 Asymmetric_Decryption_Key: bytes = None,
+                 Profile: SecOC_Profile = SecOC_Profile.Profile3_JASPAR ):
+        if Profile == SecOC_Profile.Profile1:
+            self.CSM.CsmAlgo = Crypto_Algo.AES
+            self.CSM.CsmAlgoMode = Crypto_Mode.CMAC
+            self.CSM.CsmSecondaryAlgo = Crypto_Algo.NOT_SET
+            self.FM.FM_Length = None
+            self.FM.FM_TruncatedLength = 8
+            self.authenticator_length = 24
+
+        elif Profile == SecOC_Profile.Profile2:
+            self.CSM.CsmAlgo = Crypto_Algo.AES
+            self.CSM.CsmAlgoMode = Crypto_Mode.CMAC
+            self.CSM.CsmSecondaryAlgo = Crypto_Algo.NOT_SET
+            self.FM.FM_Length = 0
+            self.FM.FM_TruncatedLength = 0
+            self.authenticator_length = 24
+
+        elif Profile == SecOC_Profile.Profile3:
+            self.CSM.CsmAlgo = Crypto_Algo.AES
+            self.CSM.CsmAlgoMode = Crypto_Mode.CMAC
+            self.CSM.CsmSecondaryAlgo = Crypto_Algo.NOT_SET
+            self.FM.FM_Length = 64
+            self.FM.FM_TruncatedLength = 4
+            self.authenticator_length = 24
+
+        def __init__(self,
+                     AuthenticatorLength: int,
+                     CsmAlgo: Crypto_Algo,
+                     FM_Mode: FreshnessModes,
+                     FM_TuncatedLength: int,
+                     FM_InitialValue: int = None,
+                     FM_Length: int = None,
+                     CsmAlgoMode: Crypto_Mode = Crypto_Mode.NOT_SET,
+                     CsmSecondaryAlgo: Crypto_Algo = Crypto_Algo.NOT_SET,
+                     Symmetric_Key: bytes = None,
+                     Asymmetric_Encryption_Key: bytes = None,
+                     Asymmetric_Decryption_Key: bytes = None):
+            pass
 
 
-    symmetric_key: bytes
-    asymmetric_encrypt_key: bytes
-    asymmetric_decrypt_key: bytes
-    cipher: Crypto_Algo = Crypto_Algo.AES
-    freshness_length: int = 0 # In bits
-    truncate_freshness_length: int = 0
-    truncate_authenticator_length: int = 0
 
 
 #Errors:
@@ -163,3 +246,5 @@ class SecOC(Packet):
 # Authenticator_raw = Data ID (16 bit, big endian) + Auth. I-PDU + Full Freshness Value (big endian)  (+ = concatinated)
 # Authenticator = Authenticator_raw encrypted with the right cryptosystem to create a MAC/signature and than truncated to the required size
 # [PRS_SecOc_00206] describes how to handle errors in the process of creating an authenticator. I don't think i should implement this.
+# [PRS_SecOc_00213] There is an option to send Auth. I-PDU in one packet and data id. full freshness value in another package, to allow for full recreation of the authenticator
+# [PRS_SecOc_00610], [PRS_SecOc_00620] and [PRS_SecOc_00630] define standard profiles (length of freshness, authenticator and used crypto)
