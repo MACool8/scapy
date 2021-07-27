@@ -17,7 +17,7 @@ from scapy.config import conf
 from scapy.error import log_loading
 from enum import Enum
 from Crypto.Cipher import AES
-from Crypto.Hash import CMAC
+from Crypto.Hash import CMAC, HMAC, SHA1, SHA224, SHA256, SHA384, SHA512, SHA3_224, SHA3_256, SHA3_384, SHA3_512, BLAKE2s, SHAKE128, SHAKE256
 
 
 class FreshnessModes(Enum):
@@ -147,29 +147,142 @@ class CryptoServiceManager():
     _asymmetric_decrypt_key: bytes = None
 
     def Csm_MacGenerate(self, Data_ID: bytes, I_PDU:bytes, FreshnessValue: bytes):
+#        Allowed_CsmAlgo = [Crypto_Algo._3DES, Crypto_Algo.AES, Crypto_Algo.BLAKE_1_256, Crypto_Algo.BLAKE_1_512,
+#                           Crypto_Algo.BLAKE_2s_256, Crypto_Algo.BLAKE_2s_512, Crypto_Algo.CHACHA, Crypto_Algo.CUSTOM,
+#                           Crypto_Algo.RIPEMD160, Crypto_Algo.RNG, Crypto_Algo.SHA1, Crypto_Algo.SHA1,
+#                           Crypto_Algo.SHA2_224, Crypto_Algo.SHA2_256, Crypto_Algo.SHA2_384, Crypto_Algo.SHA2_512,
+#                           Crypto_Algo.SHA2_512_224, Crypto_Algo.SHA2_512_256, Crypto_Algo.SHA3_224,
+#                           Crypto_Algo.SHA3_256, Crypto_Algo.SHA3_384, Crypto_Algo.SHA3_512]
+#
+#        Allowed_CsmAlgoModes = [Crypto_Mode.CMAC, Crypto_Mode.CTRDRBG, Crypto_Mode.CUSTOM, Crypto_Mode.GMAC,
+#                                Crypto_Mode.HMAC, Crypto_Mode.NOT_SET, Crypto_Mode.SIPHASH_2_4, Crypto_Mode.SIPHASH_4_8]
+
         Cipher = None
         Authenticator_Raw = b"".join([Data_ID, I_PDU, FreshnessValue])
         if self.CsmAlgo ==  Crypto_Algo.AES:
             Cipher = AES
+        elif self.CsmAlgo ==  Crypto_Algo.SHA1:
+            Cipher = SHA1
+        elif self.CsmAlgo ==  Crypto_Algo.SHA2_224:
+            Cipher = SHA224
+        elif self.CsmAlgo ==  Crypto_Algo.SHA2_256:
+            Cipher = SHA256
+        elif self.CsmAlgo ==  Crypto_Algo.SHA2_384:
+            Cipher = SHA384
+        elif self.CsmAlgo ==  Crypto_Algo.SHA2_512:
+            Cipher = SHA512
+        elif self.CsmAlgo ==  Crypto_Algo.SHA2_512_224:
+            Cipher = SHA512Hash(truncate="224")
+        elif self.CsmAlgo ==  Crypto_Algo.SHA2_512_256:
+            Cipher = SHA512Hash(truncate="256")
+        elif self.CsmAlgo ==  Crypto_Algo.SHA3_224:
+            Cipher = SHA3_224
+        elif self.CsmAlgo ==  Crypto_Algo.SHA3_256:
+            Cipher = SHA3_256
+        elif self.CsmAlgo ==  Crypto_Algo.SHA3_384:
+            Cipher = SHA3_384
+        elif self.CsmAlgo ==  Crypto_Algo.SHA3_512:
+            Cipher = SHA3_512
+        elif self.CsmAlgo == Crypto_Algo.BLAKE_2s_512:
+            Cipher = BLAKE2s.new(digest_bits=512)
+        elif self.CsmAlgo == Crypto_Algo.BLAKE_2s_256:
+            Cipher = BLAKE2s.new(digest_bits=256)
+        elif self.CsmAlgo == Crypto_Algo.SHAKE128:
+            Cipher = SHAKE128
+        elif self.CsmAlgo == Crypto_Algo.SHAKE256:
+            Cipher = SHAKE256
 
-        if
+        if self.CsmAlgoMode == Crypto_Mode.CMAC:
+            mac = CMAC.new(self._symmetric_key, ciphermod=Cipher)
+            mac.update(Authenticator_Raw)
+            return mac.digest()
 
-        Exception("Not Implemented yet")
+        elif self.CsmAlgoMode == Crypto_Mode.HMAC:
+            mac = HMAC.new(self._symmetric_key, digestmod=Cipher)
+            mac.update(Authenticator_Raw)
+            return mac.digest()
 
-    def Csm_MacVerify(self):
-        Exception("Not Implemented yet")
+        # Currently only the following Modes are implemented: AES + CMAC and
+        # All SHA-Hashes, BLAKE2s_256/512,  SHAKE128/256 + HMAC
+
+
+        Exception("MAC Generation with " + str(self.CsmAlgo) + " and " + str(self.CsmAlgoMode) + " is not implemented yet")
+
+    def Csm_MacVerify(self, Data_ID: bytes, I_PDU:bytes, FreshnessValue: bytes, Authenticator: bytes, AuthenticatorLength: int):
+        #        Allowed_CsmAlgo = [Crypto_Algo._3DES, Crypto_Algo.AES, Crypto_Algo.BLAKE_1_256, Crypto_Algo.BLAKE_1_512,
+        #                           Crypto_Algo.BLAKE_2s_256, Crypto_Algo.BLAKE_2s_512, Crypto_Algo.CHACHA, Crypto_Algo.CUSTOM,
+        #                           Crypto_Algo.RIPEMD160, Crypto_Algo.RNG, Crypto_Algo.SHA1, Crypto_Algo.SHA1,
+        #                           Crypto_Algo.SHA2_224, Crypto_Algo.SHA2_256, Crypto_Algo.SHA2_384, Crypto_Algo.SHA2_512,
+        #                           Crypto_Algo.SHA2_512_224, Crypto_Algo.SHA2_512_256, Crypto_Algo.SHA3_224,
+        #                           Crypto_Algo.SHA3_256, Crypto_Algo.SHA3_384, Crypto_Algo.SHA3_512]
+        #
+        #        Allowed_CsmAlgoModes = [Crypto_Mode.CMAC, Crypto_Mode.CTRDRBG, Crypto_Mode.CUSTOM, Crypto_Mode.GMAC,
+        #                                Crypto_Mode.HMAC, Crypto_Mode.NOT_SET, Crypto_Mode.SIPHASH_2_4, Crypto_Mode.SIPHASH_4_8]
+
+        Cipher = None
+        Authenticator_Raw = b"".join([Data_ID, I_PDU, FreshnessValue])
+        Authentic_Authenticator = None
+        if self.CsmAlgo == Crypto_Algo.AES:
+            Cipher = AES
+        elif self.CsmAlgo == Crypto_Algo.SHA1:
+            Cipher = SHA1
+        elif self.CsmAlgo == Crypto_Algo.SHA2_224:
+            Cipher = SHA224
+        elif self.CsmAlgo == Crypto_Algo.SHA2_256:
+            Cipher = SHA256
+        elif self.CsmAlgo == Crypto_Algo.SHA2_384:
+            Cipher = SHA384
+        elif self.CsmAlgo == Crypto_Algo.SHA2_512:
+            Cipher = SHA512
+        elif self.CsmAlgo == Crypto_Algo.SHA2_512_224:
+            Cipher = SHA512Hash(truncate="224")
+        elif self.CsmAlgo == Crypto_Algo.SHA2_512_256:
+            Cipher = SHA512Hash(truncate="256")
+        elif self.CsmAlgo == Crypto_Algo.SHA3_224:
+            Cipher = SHA3_224
+        elif self.CsmAlgo == Crypto_Algo.SHA3_256:
+            Cipher = SHA3_256
+        elif self.CsmAlgo == Crypto_Algo.SHA3_384:
+            Cipher = SHA3_384
+        elif self.CsmAlgo == Crypto_Algo.SHA3_512:
+            Cipher = SHA3_512
+        elif self.CsmAlgo == Crypto_Algo.BLAKE_2s_512:
+            Cipher = BLAKE2s.new(digest_bits=512)
+        elif self.CsmAlgo == Crypto_Algo.BLAKE_2s_256:
+            Cipher = BLAKE2s.new(digest_bits=256)
+        elif self.CsmAlgo == Crypto_Algo.SHAKE128:
+            Cipher = SHAKE128
+        elif self.CsmAlgo == Crypto_Algo.SHAKE256:
+            Cipher = SHAKE256
+
+        if self.CsmAlgoMode == Crypto_Mode.CMAC:
+            mac = CMAC.new(self._symmetric_key, ciphermod=Cipher)
+            mac.update(Authenticator_Raw)
+            Authentic_Authenticator = mac.digest()
+
+        elif self.CsmAlgoMode == Crypto_Mode.HMAC:
+            mac = HMAC.new(self._symmetric_key, digestmod=Cipher)
+            mac.update(Authenticator_Raw)
+            Authentic_Authenticator = mac.digest()
+
+        if Authentic_Authenticator != None:
+            # To-Do: Look at Scapy internal bit and byte implementation and try to create truncation with this
+
+        Exception("MAC Verification with " + str(self.CsmAlgo) + " and " + str(self.CsmAlgoMode) + " is not implemented yet")
 
     def Csm_SignatureGenerate(self):
-        Exception("Not Implemented yet")
+        # Asymmetric isn't implemented  at all yet
+        Exception("Not implemented yet")
 
     def Csm_SignatureVerify(self):
-        Exception("Not Implemented yet")
+        # Asymmetric isn't implemented  at all yet
+        Exception("Not implemented yet")
 
     def Csm_KeyElementSet(self, symmetric_key: bytes, ):
-        Exception("Not Implemented yet")
+        Exception("Not implemented yet")
 
     def Csm_KeySetVelid(self):
-        Exception("Not Implemented yet")
+        Exception("Not implemented yet")
 
 # Represents a Secured I-PDU
 class SecOC(Packet):
@@ -222,7 +335,7 @@ class SecOCSocket(StreamSocket):
                      AuthenticatorLength: int,
                      CsmAlgo: Crypto_Algo,
                      FM_Mode: FreshnessModes,
-                     FM_TuncatedLength: int,
+                     FM_TruncatedLength: int,
                      FM_InitialValue: int = None,
                      FM_Length: int = None,
                      CsmAlgoMode: Crypto_Mode = Crypto_Mode.NOT_SET,
@@ -240,6 +353,7 @@ class SecOCSocket(StreamSocket):
 # Ciphers Enum should include a lot more ciphers as described in AUTOSAR_SWS_CryptoServiceManager
 # Keys in SecOC Packet should be stored inside Crypto Service Manager
 
+#Notes:
 # All SecOC information are big-endian [PRS_SecOC_00101]
 # The Secured I-PDU Header is the length of the Authentic I-PDU and itself can vary in length
 # Freshness Values can also be already inside of payloads/Authentic I-PDUs
