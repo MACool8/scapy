@@ -152,7 +152,8 @@ class CryptoServiceManager():
 #                           Crypto_Algo.RIPEMD160, Crypto_Algo.RNG, Crypto_Algo.SHA1, Crypto_Algo.SHA1,
 #                           Crypto_Algo.SHA2_224, Crypto_Algo.SHA2_256, Crypto_Algo.SHA2_384, Crypto_Algo.SHA2_512,
 #                           Crypto_Algo.SHA2_512_224, Crypto_Algo.SHA2_512_256, Crypto_Algo.SHA3_224,
-#                           Crypto_Algo.SHA3_256, Crypto_Algo.SHA3_384, Crypto_Algo.SHA3_512]
+#                           Crypto_Algo.SHA3_256, Crypto_Algo.SHA3_384, Crypto_Algo.SHA3_512, Crypto_Algo.SHAKE128,
+#                           Crypto_Algo.SHAKE256, Crypto_Algo.SIPHASH]
 #
 #        Allowed_CsmAlgoModes = [Crypto_Mode.CMAC, Crypto_Mode.CTRDRBG, Crypto_Mode.CUSTOM, Crypto_Mode.GMAC,
 #                                Crypto_Mode.HMAC, Crypto_Mode.NOT_SET, Crypto_Mode.SIPHASH_2_4, Crypto_Mode.SIPHASH_4_8]
@@ -266,6 +267,7 @@ class CryptoServiceManager():
             Authentic_Authenticator = mac.digest()
 
         if Authentic_Authenticator != None:
+            pass
             # To-Do: Look at Scapy internal bit and byte implementation and try to create truncation with this
 
         Exception("MAC Verification with " + str(self.CsmAlgo) + " and " + str(self.CsmAlgoMode) + " is not implemented yet")
@@ -278,7 +280,7 @@ class CryptoServiceManager():
         # Asymmetric isn't implemented  at all yet
         Exception("Not implemented yet")
 
-    def Csm_KeyElementSet(self, symmetric_key: bytes, ):
+    def Csm_KeyElementSet(self, symmetric_key: bytes = None, asymmetric_enc_key: bytes = None, asymmetric_dec_key: bytes = None):
         Exception("Not implemented yet")
 
     def Csm_KeySetVelid(self):
@@ -286,6 +288,12 @@ class CryptoServiceManager():
 
 # Represents a Secured I-PDU
 class SecOC(Packet):
+    name = 'SecOC'
+    fields_desc = [ShortEnumField("head", None),
+                   ShortEnumField("payload", None),
+                   ShortField("freshness", None),
+                   XShortField("authenticator", None), ]
+
     header: bytes                   # Secured I-PDU Header (optional)
     payload: bytes                  # Authentic I-PDU
     freshness: bytes                # Freshness Value (optional)
